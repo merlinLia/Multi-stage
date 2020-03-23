@@ -1,0 +1,342 @@
+
+trigger:
+  #batch: true
+  branches:
+    include:
+    - develop/*
+    - feature/*
+    - master
+    exclude:
+    - releases/old*
+  paths:
+    exclude:
+    - 'docs/' # dont trigger when we update some Markdown.
+    - 'README.md'
+pr: none # Don't run against PRs
+
+
+variables:
+  VMIMAGENAME: 'ubuntu-latest'
+  REPO_NAME: '$(Build.Repository.Name)'
+  BRANCH_NAME: '$(Build.SourceBranchName)'
+  System.Debug: 'true' #set to true if you want verbose pipeline output.
+
+
+# pipeline display name
+name: $(BuildDefinitionName)_$(SourceBranchName).$(DayOfYear)$(Rev:.r)
+
+stages:
+  - stage: stage00
+    pool:
+      vmImage: '$(VMIMAGENAME)'
+    displayName: 'Stage 00'
+    #condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/develop/')
+    variables:
+      STAGE00_VAR00: 'Rodney Dangerfield from stage00 static var'
+
+    jobs:
+      - job: job00
+        pool:
+          vmImage: '$(VMIMAGENAME)'
+        displayName: 'Job 00'
+        #dependsOn:
+        #condition:
+        variables:
+          STAGE00_JOB00_VAR00: 'Charlie Chaplan from job00 static VAR'
+
+        steps:
+          - checkout: none
+          # Sets BASH00STEP00_VAR00 to "BASH00STEP00_VAR00_VALUE", then mark it as output variable
+          - bash: |
+              echo #
+              echo #
+              STAGE00_JOB00_BASH00_VAR00="Larry_from_stage00_job00"
+              STAGE00_JOB00_BASH00_VAR01="Moe_from_stage00_job00"
+              STAGE00_JOB00_BASH00_VAR02="Curly_from_stage00_job00"
+              TF_VAR_LOCATION="australiaeast"
+              echo "##vso[task.setvariable variable=STAGE00_JOB00_BASH00_VAR00;isOutput=true]$STAGE00_JOB00_BASH00_VAR00"
+              echo "##vso[task.setvariable variable=STAGE00_JOB00_BASH00_VAR01;isOutput=true]$STAGE00_JOB00_BASH00_VAR01"
+              echo "##vso[task.setvariable variable=STAGE00_JOB00_BASH00_VAR02;isOutput=true]$STAGE00_JOB00_BASH00_VAR02"
+              echo "##vso[task.setvariable variable=TF_VAR_LOCATION;isOutput=true]$TF_VAR_LOCATION"
+            name: job00Bash00
+            displayName: 'setting var and mark as output'
+
+          # Show output variable in the same job
+          - bash: |
+              echo #
+              echo #
+              echo "Output from job00Bash01"
+              echo "STAGE00_JOB00_BASH01_VAR00: contains $(job00Bash00.STAGE00_JOB00_BASH00_VAR00)"
+              echo "STAGE00_JOB00_BASH01_VAR01: contains $(job00Bash00.STAGE00_JOB00_BASH00_VAR01)"
+              echo "STAGE00_JOB00_BASH01_VAR02: contains $(job00Bash00.STAGE00_JOB00_BASH00_VAR02)"
+              echo "STAGE00_JOB00_BASH01_VAR03: contains $(job00Bash00.TF_VAR_LOCATION)"
+            name: job00Bash01
+            displayName: 'display var label and value'
+
+          - task: Bash@3
+            displayName: 'env dump'
+            inputs:
+              targetType: 'inline'
+              script: 'env | sort'
+
+      # define our second job which will pull a variable out of the first job
+      - job: job01
+        pool:
+          vmImage: '$(VMIMAGENAME)'
+        displayName: 'Job 01'
+        dependsOn: job00
+        variables:
+          STAGE00_JOB01_VAR00: 'Bill Murray from stage00 job01 static var'
+          # here we tell the pipeline yaml to go and get the var we want from job00 outputs.
+          STAGE00_JOB01_VAR01: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR00'] ]
+          STAGE00_JOB01_VAR02: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR01'] ]
+          STAGE00_JOB01_VAR03: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR02'] ]
+          STAGE00_JOB01_TF_VAR_LOCATION: $[ dependencies.job00.outputs['job00Bash00.TF_VAR_LOCATION'] ]
+
+        steps:
+          - checkout: none
+          # The variable is now available for expansion within the job
+          - bash: |
+              echo "dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR00']: $(STAGE00_JOB01_VAR01)"
+            name: job01Bash00
+            displayName: 'display var label and value from job00'
+
+          # To send the variable to the script as environmental variable, it needs to be set in the env dictionary
+          - bash: |
+              echo "STAGE00_JOB01_VAR01: $STAGE00_JOB01_VAR01"
+            name: job01Bash01
+            displayName: 'display var label and value from job00 from bash env assignment'
+            env:
+              STAGE00_JOB01_VAR01: $(STAGE00_JOB01_VAR01) # here we insert the variable into the env for this shell.
+
+          - task: Bash@3
+            displayName: 'env dump'
+            inputs:
+              targetType: 'inline'
+              script: 'env | sort'
+
+      # here we pass our three job00 variables into a template for use in there.
+      - template: ./multiple-vars-into-a-child-template.yaml
+        parameters:
+          additionalVariables0:
+            # here we tell the pipeline yaml to go and get the var we want from job00 outputs.
+            # JOB00BASH00_STAGE00_JOB00_BASH00_VAR00=Larry_from_stage00_job00 ?
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR00: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR00'] ]
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR01: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR01'] ]
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR02: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR02'] ]
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR03: 'TMPL_CONTENTS_STATIC_VAR_03'
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_TF_VAR_LOCATION: $[ dependencies.job00.outputs['job00Bash00.TF_VAR_LOCATION'] ]
+          # additionalVariables1 uses `Mapping Format`
+          additionalVariables1: { STAGE00_TEMPL_ADDITIONALVARIABLES1_VAR04: 'TMPL_CONTENTS_STATIC_VAR_04', STAGE00_TEMPL_ADDITIONALVARIABLES1_VAR05: 'TMPL_CONTENTS_STATIC_VAR_05'}
+          #TF_VAR_LOCATION1: $[ dependencies.job00.job00Bash00.outputs['job00.job00Bash00.TF_VAR_LOCATION'] ]
+          TF_VAR_LOCATION1: $[ dependencies.job00.outputs['job00Bash00.TF_VAR_LOCATION'] ]
+
+  - stage: stage01
+    pool:
+      vmImage: '$(VMIMAGENAME)'
+    displayName: 'Stage 00'
+    #condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/develop/')
+    variables:
+      STAGE00_VAR00: 'Rodney Dangerfield from stage00 static var'
+
+    jobs:
+      - job: job00
+        pool:
+          vmImage: '$(VMIMAGENAME)'
+        displayName: 'Job 00'
+        #dependsOn:
+        #condition:
+        variables:
+          STAGE00_JOB00_VAR00: 'Charlie Chaplan from job00 static VAR'
+
+        steps:
+          - checkout: none
+          # Sets BASH00STEP00_VAR00 to "BASH00STEP00_VAR00_VALUE", then mark it as output variable
+          - bash: |
+              echo #
+              echo #
+              STAGE00_JOB00_BASH00_VAR00="Larry_from_stage00_job00"
+              STAGE00_JOB00_BASH00_VAR01="Moe_from_stage00_job00"
+              STAGE00_JOB00_BASH00_VAR02="Curly_from_stage00_job00"
+              TF_VAR_LOCATION="australiaeast"
+              echo "##vso[task.setvariable variable=STAGE00_JOB00_BASH00_VAR00;isOutput=true]$STAGE00_JOB00_BASH00_VAR00"
+              echo "##vso[task.setvariable variable=STAGE00_JOB00_BASH00_VAR01;isOutput=true]$STAGE00_JOB00_BASH00_VAR01"
+              echo "##vso[task.setvariable variable=STAGE00_JOB00_BASH00_VAR02;isOutput=true]$STAGE00_JOB00_BASH00_VAR02"
+              echo "##vso[task.setvariable variable=TF_VAR_LOCATION;isOutput=true]$TF_VAR_LOCATION"
+            name: job00Bash00
+            displayName: 'setting var and mark as output'
+
+          # Show output variable in the same job
+          - bash: |
+              echo #
+              echo #
+              echo "Output from job00Bash01"
+              echo "STAGE00_JOB00_BASH01_VAR00: contains $(job00Bash00.STAGE00_JOB00_BASH00_VAR00)"
+              echo "STAGE00_JOB00_BASH01_VAR01: contains $(job00Bash00.STAGE00_JOB00_BASH00_VAR01)"
+              echo "STAGE00_JOB00_BASH01_VAR02: contains $(job00Bash00.STAGE00_JOB00_BASH00_VAR02)"
+              echo "STAGE00_JOB00_BASH01_VAR03: contains $(job00Bash00.TF_VAR_LOCATION)"
+            name: job00Bash01
+            displayName: 'display var label and value'
+
+          - task: Bash@3
+            displayName: 'env dump'
+            inputs:
+              targetType: 'inline'
+              script: 'env | sort'
+
+      # define our second job which will pull a variable out of the first job
+      - job: job01
+        pool:
+          vmImage: '$(VMIMAGENAME)'
+        displayName: 'Job 01'
+        dependsOn: job00
+        variables:
+          STAGE00_JOB01_VAR00: 'Bill Murray from stage00 job01 static var'
+          # here we tell the pipeline yaml to go and get the var we want from job00 outputs.
+          STAGE00_JOB01_VAR01: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR00'] ]
+          STAGE00_JOB01_VAR02: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR01'] ]
+          STAGE00_JOB01_VAR03: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR02'] ]
+          STAGE00_JOB01_TF_VAR_LOCATION: $[ dependencies.job00.outputs['job00Bash00.TF_VAR_LOCATION'] ]
+
+        steps:
+          - checkout: none
+          # The variable is now available for expansion within the job
+          - bash: |
+              echo "dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR00']: $(STAGE00_JOB01_VAR01)"
+            name: job01Bash00
+            displayName: 'display var label and value from job00'
+
+          # To send the variable to the script as environmental variable, it needs to be set in the env dictionary
+          - bash: |
+              echo "STAGE00_JOB01_VAR01: $STAGE00_JOB01_VAR01"
+            name: job01Bash01
+            displayName: 'display var label and value from job00 from bash env assignment'
+            env:
+              STAGE00_JOB01_VAR01: $(STAGE00_JOB01_VAR01) # here we insert the variable into the env for this shell.
+
+          - task: Bash@3
+            displayName: 'env dump'
+            inputs:
+              targetType: 'inline'
+              script: 'env | sort'
+
+      # here we pass our three job00 variables into a template for use in there.
+      - template: ./multiple-vars-into-a-child-template.yaml
+        parameters:
+
+          additionalVariables0:
+            # here we tell the pipeline yaml to go and get the var we want from job00 outputs.
+            # JOB00BASH00_STAGE00_JOB00_BASH00_VAR00=Larry_from_stage00_job00 ?
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR00: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR00'] ]
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR01: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR01'] ]
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR02: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR02'] ]
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR03: 'TMPL_CONTENTS_STATIC_VAR_03'
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_TF_VAR_LOCATION: $[ dependencies.job00.outputs['job00Bash00.TF_VAR_LOCATION'] ]
+          # additionalVariables1 uses `Mapping Format`
+          additionalVariables1: { STAGE00_TEMPL_ADDITIONALVARIABLES1_VAR04: 'TMPL_CONTENTS_STATIC_VAR_04', STAGE00_TEMPL_ADDITIONALVARIABLES1_VAR05: 'TMPL_CONTENTS_STATIC_VAR_05'}
+          #TF_VAR_LOCATION1: $[ dependencies.job00.job00Bash00.outputs['job00.job00Bash00.TF_VAR_LOCATION'] ]
+          TF_VAR_LOCATION1: $[ dependencies.job00.outputs['job00Bash00.TF_VAR_LOCATION'] ]
+  - stage: stage03
+    pool:
+      vmImage: '$(VMIMAGENAME)'
+    displayName: 'Stage 00'
+    #condition: startsWith(variables['Build.SourceBranch'], 'refs/heads/develop/')
+    variables:
+      STAGE00_VAR00: 'Rodney Dangerfield from stage00 static var'
+
+    jobs:
+      - job: job00
+        pool:
+          vmImage: '$(VMIMAGENAME)'
+        displayName: 'Job 00'
+        #dependsOn:
+        #condition:
+        variables:
+          STAGE00_JOB00_VAR00: 'Charlie Chaplan from job00 static VAR'
+
+        steps:
+          - checkout: none
+          # Sets BASH00STEP00_VAR00 to "BASH00STEP00_VAR00_VALUE", then mark it as output variable
+          - bash: |
+              echo #
+              echo #
+              STAGE00_JOB00_BASH00_VAR00="Larry_from_stage00_job00"
+              STAGE00_JOB00_BASH00_VAR01="Moe_from_stage00_job00"
+              STAGE00_JOB00_BASH00_VAR02="Curly_from_stage00_job00"
+              TF_VAR_LOCATION="australiaeast"
+              echo "##vso[task.setvariable variable=STAGE00_JOB00_BASH00_VAR00;isOutput=true]$STAGE00_JOB00_BASH00_VAR00"
+              echo "##vso[task.setvariable variable=STAGE00_JOB00_BASH00_VAR01;isOutput=true]$STAGE00_JOB00_BASH00_VAR01"
+              echo "##vso[task.setvariable variable=STAGE00_JOB00_BASH00_VAR02;isOutput=true]$STAGE00_JOB00_BASH00_VAR02"
+              echo "##vso[task.setvariable variable=TF_VAR_LOCATION;isOutput=true]$TF_VAR_LOCATION"
+            name: job00Bash00
+            displayName: 'setting var and mark as output'
+
+          # Show output variable in the same job
+          - bash: |
+              echo #
+              echo #
+              echo "Output from job00Bash01"
+              echo "STAGE00_JOB00_BASH01_VAR00: contains $(job00Bash00.STAGE00_JOB00_BASH00_VAR00)"
+              echo "STAGE00_JOB00_BASH01_VAR01: contains $(job00Bash00.STAGE00_JOB00_BASH00_VAR01)"
+              echo "STAGE00_JOB00_BASH01_VAR02: contains $(job00Bash00.STAGE00_JOB00_BASH00_VAR02)"
+              echo "STAGE00_JOB00_BASH01_VAR03: contains $(job00Bash00.TF_VAR_LOCATION)"
+            name: job00Bash01
+            displayName: 'display var label and value'
+
+          - task: Bash@3
+            displayName: 'env dump'
+            inputs:
+              targetType: 'inline'
+              script: 'env | sort'
+
+      # define our second job which will pull a variable out of the first job
+      - job: job01
+        pool:
+          vmImage: '$(VMIMAGENAME)'
+        displayName: 'Job 01'
+        dependsOn: job00
+        variables:
+          STAGE00_JOB01_VAR00: 'Bill Murray from stage00 job01 static var'
+          # here we tell the pipeline yaml to go and get the var we want from job00 outputs.
+          STAGE00_JOB01_VAR01: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR00'] ]
+          STAGE00_JOB01_VAR02: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR01'] ]
+          STAGE00_JOB01_VAR03: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR02'] ]
+          STAGE00_JOB01_TF_VAR_LOCATION: $[ dependencies.job00.outputs['job00Bash00.TF_VAR_LOCATION'] ]
+
+        steps:
+          - checkout: none
+          # The variable is now available for expansion within the job
+          - bash: |
+              echo "dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR00']: $(STAGE00_JOB01_VAR01)"
+            name: job01Bash00
+            displayName: 'display var label and value from job00'
+
+          # To send the variable to the script as environmental variable, it needs to be set in the env dictionary
+          - bash: |
+              echo "STAGE00_JOB01_VAR01: $STAGE00_JOB01_VAR01"
+            name: job01Bash01
+            displayName: 'display var label and value from job00 from bash env assignment'
+            env:
+              STAGE00_JOB01_VAR01: $(STAGE00_JOB01_VAR01) # here we insert the variable into the env for this shell.
+
+          - task: Bash@3
+            displayName: 'env dump'
+            inputs:
+              targetType: 'inline'
+              script: 'env | sort'
+
+      # here we pass our three job00 variables into a template for use in there.
+      - template: ./multiple-vars-into-a-child-template.yaml
+        parameters:
+          additionalVariables0:
+            # here we tell the pipeline yaml to go and get the var we want from job00 outputs.
+            # JOB00BASH00_STAGE00_JOB00_BASH00_VAR00=Larry_from_stage00_job00 ?
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR00: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR00'] ]
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR01: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR01'] ]
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR02: $[ dependencies.job00.outputs['job00Bash00.STAGE00_JOB00_BASH00_VAR02'] ]
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_VAR03: 'TMPL_CONTENTS_STATIC_VAR_03'
+            STAGE00_TEMPL_ADDITIONALVARIABLES0_TF_VAR_LOCATION: $[ dependencies.job00.outputs['job00Bash00.TF_VAR_LOCATION'] ]
+          # additionalVariables1 uses `Mapping Format`
+          additionalVariables1: { STAGE00_TEMPL_ADDITIONALVARIABLES1_VAR04: 'TMPL_CONTENTS_STATIC_VAR_04', STAGE00_TEMPL_ADDITIONALVARIABLES1_VAR05: 'TMPL_CONTENTS_STATIC_VAR_05'}
+          #TF_VAR_LOCATION1: $[ dependencies.job00.job00Bash00.outputs['job00.job00Bash00.TF_VAR_LOCATION'] ]
+          TF_VAR_LOCATION1: $[ dependencies.job00.outputs['job00Bash00.TF_VAR_LOCATION'] ]
