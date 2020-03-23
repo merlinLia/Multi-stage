@@ -1,0 +1,112 @@
+# https://docs.microsoft.com/en-us/azure/devops/pipelines/process/templates?view=azure-devops#insertion
+
+parameters:
+  additionalVariables0: {}
+  additionalVariables1: {}
+  deployEnvLabel: 'development' # FIXME - do a run with this setting disabled.
+
+jobs:
+
+  - job: templateJob
+    displayName: 'tmpl: job'
+    continueOnError: false
+    dependsOn: job00
+    pool:
+      vmImage: $(VMIMAGENAME)
+    variables:
+      ${{ insert }}: ${{ parameters.additionalVariables0 }}
+      ${{ insert }}: ${{ parameters.additionalVariables1 }}
+      STAGE00_TEMPL_JOB_VAR: 'STATIC_TMPL_JOB_VALUE'
+
+    steps:
+
+      - task: Bash@3
+        displayName: '01 tmpl job env dump'
+        name: envDump0
+        inputs:
+          targetType: 'inline'
+          script: 'env | sort'
+
+      # insert the additionalVarliables0 param into the env
+      - task: Bash@3
+        displayName: '02 additionalVariables0 env dump '
+        name: envDump1
+        inputs:
+          targetType: 'inline'
+          script: 'env | sort'
+        env:
+          # Place our template parameters into the task environment.
+          # see https://docs.microsoft.com/en-us/azure/devops/pipelines/process/templates?view=azure-devops#insertion
+          ${{ insert }}: ${{ parameters.additionalVariables0 }}
+
+      # insert the additionalVarliables1 param into the env
+      - task: Bash@3
+        displayName: '03 additionalVariables1 env dump'
+        name: envDump2
+        inputs:
+          targetType: 'inline'
+          script: 'env | sort'
+        env:
+          # Place our template parameters into the task environment.
+          # see https://docs.microsoft.com/en-us/azure/devops/pipelines/process/templates?view=azure-devops#insertion
+          ${{ insert }}: ${{ parameters.additionalVariables1 }}
+
+      # display the env vars AFTER we were done with insertions.
+      - task: Bash@3
+        displayName: '04 tmpl job env dump'
+        name: envDump3
+        inputs:
+          targetType: 'inline'
+          script: 'env | sort'
+
+  - deployment: templateDeploy
+    displayName: 'tmpl: deploy'
+    continueOnError: false
+    dependsOn: job00
+    # condition: succeeded('templateJob')
+    pool:
+      vmImage: $(VMIMAGENAME)
+    environment: ${{ parameters.deployEnvLabel }}
+    variables:
+      ${{ insert }}: ${{ parameters.additionalVariables0 }}
+      ${{ insert }}: ${{ parameters.additionalVariables1 }}
+      TF_VAR_LOCATION1: ${{ parameters.TF_VAR_LOCATION1 }}
+      STAGE00_TEMPL_DEPLOY_VAR: 'STATIC_TMPL_DEPLOY_VALUE'
+
+    strategy:
+      # default deployment strategy
+      runOnce:
+       deploy:
+         steps:
+
+          # insert the additionalVarliables0 param into the env
+          - task: Bash@3
+            displayName: '00 additionalVariables0 env dump '
+            name: envDump1
+            inputs:
+              targetType: 'inline'
+              script: 'env | sort'
+            env:
+              # Place our template parameters into the task environment.
+              # see https://docs.microsoft.com/en-us/azure/devops/pipelines/process/templates?view=azure-devops#insertion
+              ${{ insert }}: ${{ parameters.additionalVariables0 }}
+
+          # insert the additionalVarliables1 param into the env
+          - task: Bash@3
+            displayName: '01 additionalVariables1 env dump'
+            name: envDump2
+            inputs:
+              targetType: 'inline'
+              script: 'env | sort'
+            env:
+              # Place our template parameters into the task environment.
+              # see https://docs.microsoft.com/en-us/azure/devops/pipelines/process/templates?view=azure-devops#insertion
+              ${{ insert }}: ${{ parameters.additionalVariables1 }}
+
+          # this task will dump ALL env vars available in the agent.
+          # you can add a `| grep ???` after the `sort` to filter values you're interested in.
+          - task: Bash@3
+            displayName: '02 env dump'
+            inputs:
+              targetType: 'inline'
+              script: 'env | sort'
